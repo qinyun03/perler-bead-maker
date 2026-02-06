@@ -162,21 +162,34 @@ export default function Home() {
             return;
           }
 
-          // 第一步：简单缩放
+          // 第一步：简单缩放（关闭平滑，避免抗锯齿产生灰色杂点）
+          ctx.imageSmoothingEnabled = false;
           ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
           ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
 
           const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
           const data = imageData.data;
 
-          // 第二步：预对比度与饱和度增强（让灰蒙蒙的中间色变成明确深/浅色）
           const CONTRAST = 1.25;
           const SATURATION = 1.2;
+          const DARK_THRESHOLD = 100;   // 低于此灰度视为近黑
+          const LIGHT_THRESHOLD = 155;  // 高于此灰度视为近白
+
           for (let i = 0; i < data.length; i += 4) {
             let r = data[i];
             let g = data[i + 1];
             let b = data[i + 2];
+            const a = data[i + 3];
 
+            // 透明度清洗：半透明像素强制视为白色，防止透明边缘混合成灰
+            if (a < 250) {
+              data[i] = 255;
+              data[i + 1] = 255;
+              data[i + 2] = 255;
+              continue;
+            }
+
+            // 预对比度与饱和度
             r = (r - 128) * CONTRAST + 128;
             g = (g - 128) * CONTRAST + 128;
             b = (b - 128) * CONTRAST + 128;
@@ -185,6 +198,17 @@ export default function Home() {
             r = gray + (r - gray) * SATURATION;
             g = gray + (g - gray) * SATURATION;
             b = gray + (b - gray) * SATURATION;
+
+            // 二值化倾向：近黑更黑，近白更白
+            if (gray < DARK_THRESHOLD) {
+              const k = 0.4; // 压向黑色
+              r *= k; g *= k; b *= k;
+            } else if (gray > LIGHT_THRESHOLD) {
+              const k = 0.4; // 压向白色
+              r = 255 - (255 - r) * k;
+              g = 255 - (255 - g) * k;
+              b = 255 - (255 - b) * k;
+            }
 
             data[i] = Math.max(0, Math.min(255, Math.round(r)));
             data[i + 1] = Math.max(0, Math.min(255, Math.round(g)));
