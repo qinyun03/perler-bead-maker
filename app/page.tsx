@@ -145,7 +145,7 @@ export default function Home() {
     };
   };
 
-  // 把 base64 图片加载到隐藏 canvas 中，缩放到 50×50 后逐像素取色并匹配最近颜色
+  // 最简化算法：缩放 → 预对比度 → 最近颜色映射（无抖动）
   const processImage = (src: string) => {
     setProcessing(true);
     try {
@@ -162,30 +162,49 @@ export default function Home() {
             return;
           }
 
+          // 第一步：简单缩放
           ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
           ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
 
-          // 从缩放后的 50×50 图像中取出 RGBA 像素数据
           const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
           const data = imageData.data;
 
-          const newGrid: PixelCell[][] = [];
+          // 第二步：预对比度与饱和度增强（让灰蒙蒙的中间色变成明确深/浅色）
+          const CONTRAST = 1.25;
+          const SATURATION = 1.2;
+          for (let i = 0; i < data.length; i += 4) {
+            let r = data[i];
+            let g = data[i + 1];
+            let b = data[i + 2];
 
+            r = (r - 128) * CONTRAST + 128;
+            g = (g - 128) * CONTRAST + 128;
+            b = (b - 128) * CONTRAST + 128;
+
+            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = gray + (r - gray) * SATURATION;
+            g = gray + (g - gray) * SATURATION;
+            b = gray + (b - gray) * SATURATION;
+
+            data[i] = Math.max(0, Math.min(255, Math.round(r)));
+            data[i + 1] = Math.max(0, Math.min(255, Math.round(g)));
+            data[i + 2] = Math.max(0, Math.min(255, Math.round(b)));
+          }
+
+          // 第三步：最近颜色映射（无抖动，直接替换为最近色）
+          const newGrid: PixelCell[][] = [];
           for (let y = 0; y < GRID_SIZE; y++) {
             const row: PixelCell[] = [];
             for (let x = 0; x < GRID_SIZE; x++) {
-              // data 结构：每四个数对应一个像素的 RGBA
               const idx = (y * GRID_SIZE + x) * 4;
               const r = data[idx];
               const g = data[idx + 1];
               const b = data[idx + 2];
-              const nearest = findNearestColor({ r, g, b });
-              row.push(nearest);
+              row.push(findNearestColor({ r, g, b }));
             }
             newGrid.push(row);
           }
 
-          // 保存最终 50×50 网格结果
           setGrid(newGrid);
         } catch (e) {
           console.error(e);
