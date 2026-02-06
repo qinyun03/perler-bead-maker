@@ -2,93 +2,22 @@
 
 import { useMemo, useRef, useState } from "react";
 import colorSystemMapping from "./colorSystemMapping.json";
-
-// 支持的商家类型
-type Merchant = "MARD" | "COCO" | "漫漫" | "盼盼" | "咪小窝";
-
-// 每个颜色在五个商家下对应的编号
-type ColorCodes = Record<Merchant, string>;
-
-// 颜色映射表中一条记录的结构（带预计算好的 RGB）
-type ColorMappingEntry = {
-  hex: string; // 颜色原始十六进制值（来自 colorSystemMapping.json 的 key）
-  r: number;
-  g: number;
-  b: number;
-  codes: ColorCodes; // 不同商家的编号
-};
-
-// 像素网格中每一个格子的内容
-type PixelCell = {
-  hex: string; // 该格子最终选用的颜色（十六进制）
-  codes: ColorCodes; // 该颜色在五个商家的编号
-};
-
-// 商家列表顺序，用于渲染按钮
-const MERCHANTS: Merchant[] = ["MARD", "COCO", "漫漫", "盼盼", "咪小窝"];
-// 固定网格大小为 50 × 50
-const GRID_SIZE = 50;
-
-// 十六进制颜色转 RGB，方便后续计算颜色距离
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const normalized = hex.startsWith("#") ? hex : `#${hex}`;
-  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(normalized);
-  if (!match) return null;
-  return {
-    r: parseInt(match[1], 16),
-    g: parseInt(match[2], 16),
-    b: parseInt(match[3], 16),
-  };
-}
-
-// 计算两种颜色的“欧氏距离平方”，用来做最近颜色匹配
-function colorDistanceSq(a: { r: number; g: number; b: number }, b: {
-  r: number;
-  g: number;
-  b: number;
-}): number {
-  const dr = a.r - b.r;
-  const dg = a.g - b.g;
-  const db = a.b - b.b;
-  return dr * dr + dg * dg + db * db;
-}
+import type { Merchant, PixelCell } from "./types";
+import { MERCHANTS, GRID_SIZE } from "./types";
+import { createMappingEntries } from "./utils/color";
+import { processImageSrc } from "./utils/image";
+import PixelGrid from "./components/PixelGrid";
 
 export default function Home() {
-  // 当前选中的商家
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant>("MARD");
-  // 上传图片的 base64 地址，用于左侧预览
   const [imageSrc, setImageSrc] = useState<string | null>(null);
-  // 生成好的 50 × 50 网格，每个格子是 PixelCell
   const [grid, setGrid] = useState<PixelCell[][] | null>(null);
-  // 是否正在处理图片（压缩 + 取色 + 匹配）
   const [processing, setProcessing] = useState(false);
-  // 错误信息展示
   const [error, setError] = useState<string | null>(null);
-  // 文件 input 的引用，用于“清空重新选择”时重置
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 预处理颜色映射：把 JSON 转成包含 RGB 的数组，便于后续做最近颜色匹配
-  const mappingEntries: ColorMappingEntry[] = useMemo(() => {
-    return Object.entries(colorSystemMapping).flatMap(([hex, codesObj]) => {
-      const rgb = hexToRgb(hex);
-      if (!rgb) {
-        // 如果 hex 非法，直接丢弃该条记录
-        return [];
-      }
-      const codes = codesObj as ColorCodes;
-      return [
-        {
-          hex,
-          r: rgb.r,
-          g: rgb.g,
-          b: rgb.b,
-          codes,
-        },
-      ];
-    });
-  }, []);
+  const mappingEntries = useMemo(() => createMappingEntries(colorSystemMapping as any), []);
 
-  // 处理文件上传：读成 dataURL，并触发图片处理
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -113,148 +42,24 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
-  // 给定一个 RGB 颜色，在映射表中找到“最近”的一条颜色记录
-  const findNearestColor = (rgb: { r: number; g: number; b: number }): PixelCell => {
-    let best: ColorMappingEntry | null = null;
-    let bestDist = Number.POSITIVE_INFINITY;
-
-    for (const entry of mappingEntries) {
-      const dist = colorDistanceSq(rgb, entry);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = entry;
-      }
-    }
-
-    if (!best) {
-      return {
-        hex: "#FFFFFF",
-        codes: {
-          MARD: "-",
-          COCO: "-",
-          漫漫: "-",
-          盼盼: "-",
-          咪小窝: "-",
-        },
-      };
-    }
-
-    return {
-      hex: best.hex,
-      codes: best.codes,
-    };
-  };
-
-  // 最简化算法：缩放 → 预对比度 → 最近颜色映射（无抖动）
-  const processImage = (src: string) => {
+  const processImage = async (src: string) => {
     setProcessing(true);
+    setError(null);
     try {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = GRID_SIZE;
-          canvas.height = GRID_SIZE;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            setError("浏览器不支持画布处理。");
-            setProcessing(false);
-            return;
-          }
-
-          // 第一步：简单缩放（关闭平滑，避免抗锯齿产生灰色杂点）
-          ctx.imageSmoothingEnabled = false;
-          ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
-          ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
-
-          const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
-          const data = imageData.data;
-
-          const CONTRAST = 1.25;
-          const SATURATION = 1.2;
-          const DARK_THRESHOLD = 100;   // 低于此灰度视为近黑
-          const LIGHT_THRESHOLD = 155;  // 高于此灰度视为近白
-
-          for (let i = 0; i < data.length; i += 4) {
-            let r = data[i];
-            let g = data[i + 1];
-            let b = data[i + 2];
-            const a = data[i + 3];
-
-            // 透明度清洗：半透明像素强制视为白色，防止透明边缘混合成灰
-            if (a < 250) {
-              data[i] = 255;
-              data[i + 1] = 255;
-              data[i + 2] = 255;
-              continue;
-            }
-
-            // 预对比度与饱和度
-            r = (r - 128) * CONTRAST + 128;
-            g = (g - 128) * CONTRAST + 128;
-            b = (b - 128) * CONTRAST + 128;
-
-            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-            r = gray + (r - gray) * SATURATION;
-            g = gray + (g - gray) * SATURATION;
-            b = gray + (b - gray) * SATURATION;
-
-            // 二值化倾向：近黑更黑，近白更白
-            if (gray < DARK_THRESHOLD) {
-              const k = 0.4; // 压向黑色
-              r *= k; g *= k; b *= k;
-            } else if (gray > LIGHT_THRESHOLD) {
-              const k = 0.4; // 压向白色
-              r = 255 - (255 - r) * k;
-              g = 255 - (255 - g) * k;
-              b = 255 - (255 - b) * k;
-            }
-
-            data[i] = Math.max(0, Math.min(255, Math.round(r)));
-            data[i + 1] = Math.max(0, Math.min(255, Math.round(g)));
-            data[i + 2] = Math.max(0, Math.min(255, Math.round(b)));
-          }
-
-          // 第三步：最近颜色映射（无抖动，直接替换为最近色）
-          const newGrid: PixelCell[][] = [];
-          for (let y = 0; y < GRID_SIZE; y++) {
-            const row: PixelCell[] = [];
-            for (let x = 0; x < GRID_SIZE; x++) {
-              const idx = (y * GRID_SIZE + x) * 4;
-              const r = data[idx];
-              const g = data[idx + 1];
-              const b = data[idx + 2];
-              row.push(findNearestColor({ r, g, b }));
-            }
-            newGrid.push(row);
-          }
-
-          setGrid(newGrid);
-        } catch (e) {
-          console.error(e);
-          setError("处理图片时出错，请重试。");
-        } finally {
-          setProcessing(false);
-        }
-      };
-      img.onerror = () => {
-        setError("加载图片失败，请重试。");
-        setProcessing(false);
-      };
-      img.src = src;
+      const newGrid = await processImageSrc(src, mappingEntries, GRID_SIZE);
+      setGrid(newGrid);
     } catch (e) {
       console.error(e);
       setError("处理图片时出错，请重试。");
+    } finally {
       setProcessing(false);
     }
   };
 
-  // 切换商家时，只改变展示的编号，不重新计算网格
   const handleMerchantChange = (merchant: Merchant) => {
     setSelectedMerchant(merchant);
   };
 
-  // 重置所有状态，方便用户重新上传
   const handleReset = () => {
     setImageSrc(null);
     setGrid(null);
