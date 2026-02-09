@@ -26,6 +26,7 @@ export default function Home() {
   // 图片原始尺寸和显示尺寸
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [imageDisplaySize, setImageDisplaySize] = useState<{ width: number; height: number } | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
 
   const mappingEntries = useMemo(() => createMappingEntries(colorSystemMapping as any), []);
   const [activeColor, setActiveColor] = useState<PixelCell | null>(null);
@@ -54,6 +55,7 @@ export default function Home() {
     }
 
     setError(null);
+    setSelectedFileName(file.name);
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result;
@@ -120,6 +122,7 @@ export default function Home() {
     setSelectedMerchant("MARD");
     setImageNaturalSize(null);
     setImageDisplaySize(null);
+    setSelectedFileName(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -178,14 +181,52 @@ export default function Home() {
               <label className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
                 1. 上传图片
               </label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="block w-full text-sm text-zinc-700 file:mr-4 file:rounded-md file:border-0 file:bg-zinc-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-50 hover:file:bg-zinc-800 cursor-pointer dark:file:bg-zinc-100 dark:file:text-zinc-900 dark:hover:file:bg-zinc-200"
-              />
-              <span className="text-xs text-zinc-500">
+              
+              {/* 自定义上传按钮 - 卡片样式 */}
+              <div className="flex flex-col gap-3">
+                <div 
+                  className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-white p-6 transition-colors hover:border-zinc-400 hover:bg-zinc-50 cursor-pointer dark:border-zinc-700 dark:bg-zinc-900/40 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/40"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    <div className="rounded-full bg-zinc-100 p-3 dark:bg-zinc-800">
+                      <svg className="h-6 w-6 text-zinc-600 dark:text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-zinc-800 dark:text-zinc-100">点击上传图片</div>
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">支持 JPG、PNG、WebP 等格式</div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 隐藏的原生文件输入 */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                
+                {/* 文件选择状态显示 */}
+                {selectedFileName && (
+                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50/80 px-3 py-2 dark:bg-emerald-950/30">
+                    <svg className="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <div className="text-xs text-emerald-700 dark:text-emerald-300">
+                      已选择 1 张图片
+                      <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70 truncate max-w-[200px]" title={selectedFileName}>
+                        {selectedFileName.length > 30 ? selectedFileName.substring(0, 27) + '...' : selectedFileName}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <span className="text-xs text-zinc-500 mt-2">
                 建议使用正方形或接近正方形的图片，系统会自动等比缩放并居中到 {gridSize}×{gridSize} 像素进行取样。
               </span>
             </div>
@@ -259,13 +300,6 @@ export default function Home() {
               像素画尺寸：<span className="font-medium">{gridSize} × {gridSize}（共 {gridSize * gridSize} 点）</span>，
               每个点显示当前商家的颜色编号。
             </div>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="text-xs rounded-full border border-zinc-300 px-3 py-1 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              清空重新选择
-            </button>
           </div>
 
           {error && (
@@ -305,9 +339,18 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
-              像素图纸（编号视图）
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                像素图纸（编号视图）
+              </h2>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="text-xs rounded-full border border-zinc-300 px-3 py-1.5 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                清空重新选择
+              </button>
+            </div>
             {grid ? (
               <>
                 <div className="text-xs text-zinc-600 dark:text-zinc-400">
@@ -345,44 +388,52 @@ export default function Home() {
                   </div>
 
                   {/* 透明度滑块 - 固定在图纸下方 */}
-                  <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-3 bg-zinc-50/60 dark:bg-zinc-900/40 p-3 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <label className="text-sm text-zinc-700 dark:text-zinc-200 whitespace-nowrap">透明度控制</label>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={overlayOpacity}
-                        onChange={(e) => setOverlayOpacity(Number(e.target.value))}
-                        className="w-32 sm:w-48"
-                      />
-                      <div className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{overlayOpacity}%</div>
+                  <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium text-zinc-800 dark:text-zinc-100">透明度控制</h3>
+                        <div className="text-sm text-zinc-600 dark:text-zinc-400">{overlayOpacity}%</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={overlayOpacity}
+                          onChange={(e) => setOverlayOpacity(Number(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">0% 显示底图 · 100% 显示拼豆图纸</div>
                     </div>
-                    <div className="text-xs text-zinc-500">0% 显示底图 · 100% 显示拼豆图纸</div>
                   </div>
                 </div>
 
                 {/* 编辑区：配色面板（调色板优先显示图纸已有颜色，实际编辑在上方图纸进行）*/}
-                <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium text-zinc-800 dark:text-zinc-100">手动编辑与配色</div>
-                    <div className="text-xs text-zinc-500">在上方图纸点击填色 · 双击吸管取色</div>
-                  </div>
+                <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-zinc-800 dark:text-zinc-100">手动编辑与配色</h3>
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">在上方图纸点击填色 · 双击吸管取色</div>
+                    </div>
 
-                  <div className="mt-3 grid grid-cols-6 gap-1 max-h-48 overflow-auto rounded border border-zinc-100 p-1 dark:border-zinc-800">
-                    {prioritizedPalette.map((entry) => (
-                      <button
-                        key={entry.hex}
-                        onClick={() => setActiveColor({ hex: entry.hex, codes: entry.codes })}
-                        type="button"
-                        className={`w-8 h-8 rounded-sm border ${activeColor?.hex === entry.hex ? "ring-2 ring-offset-1 ring-indigo-500" : "border-zinc-200"}`}
-                        style={{ backgroundColor: entry.hex }}
-                        title={`${entry.hex} · ${entry.codes[selectedMerchant]}`}
-                      />
-                    ))}
-                  </div>
+                    <div className="grid grid-cols-6 gap-1 max-h-48 overflow-auto rounded border border-zinc-100 p-1 dark:border-zinc-800">
+                      {prioritizedPalette.map((entry) => (
+                        <button
+                          key={entry.hex}
+                          onClick={() => setActiveColor({ hex: entry.hex, codes: entry.codes })}
+                          type="button"
+                          className={`w-8 h-8 rounded-sm border ${activeColor?.hex === entry.hex ? "ring-2 ring-offset-1 ring-indigo-500" : "border-zinc-200"}`}
+                          style={{ backgroundColor: entry.hex }}
+                          title={`${entry.hex} · ${entry.codes[selectedMerchant]}`}
+                        />
+                      ))}
+                    </div>
 
-                  <div className="mt-2 text-xs">当前选中： <span className="font-medium">{activeColor ? activeColor.codes[selectedMerchant] : "—"}</span></div>
+                    <div className="text-xs text-zinc-700 dark:text-zinc-300">
+                      当前选中： <span className="font-medium">{activeColor ? activeColor.codes[selectedMerchant] : "—"}</span>
+                    </div>
+                  </div>
                 </div>
               </>
             ) : (
