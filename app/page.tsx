@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import colorSystemMapping from "./colorSystemMapping.json";
-import type { Merchant, PixelCell } from "./types";
+import type { Merchant, PixelCell, FilterStyle } from "./types";
 import { MERCHANTS, GRID_SIZE } from "./types";
 import { createMappingEntries } from "./utils/color";
 import { processImageSrc } from "./utils/image";
@@ -15,6 +15,9 @@ export default function Home() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 色彩风格滤镜状态（用于调色板子集或在 processImageSrc 中传入）
+  const [filterStyle, setFilterStyle] = useState<FilterStyle>("none");
 
   const mappingEntries = useMemo(() => createMappingEntries(colorSystemMapping as any), []);
 
@@ -33,7 +36,7 @@ export default function Home() {
       const result = reader.result;
       if (typeof result === "string") {
         setImageSrc(result);
-        processImage(result);
+        processImage(result, filterStyle);
       }
     };
     reader.onerror = () => {
@@ -42,11 +45,12 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
-  const processImage = async (src: string) => {
+  const processImage = async (src: string, style?: FilterStyle) => {
     setProcessing(true);
     setError(null);
     try {
-      const newGrid = await processImageSrc(src, mappingEntries, GRID_SIZE);
+      const usedStyle = style ?? filterStyle;
+      const newGrid = await processImageSrc(src, mappingEntries, GRID_SIZE, usedStyle);
       setGrid(newGrid);
     } catch (e) {
       console.error(e);
@@ -122,6 +126,25 @@ export default function Home() {
                     {m}
                   </button>
                 ))}
+              </div>
+              {/* 色彩风格选择：切换后会重新处理当前图片（若已选择） */}
+              <div className="mt-3">
+                <label className="text-sm font-medium text-zinc-800 dark:text-zinc-100">3. 色彩风格</label>
+                <div className="mt-2">
+                  <select
+                    value={filterStyle}
+                    onChange={(e) => {
+                      const v = e.target.value as FilterStyle;
+                      setFilterStyle(v);
+                      if (imageSrc) processImage(imageSrc, v);
+                    }}
+                    className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                  >
+                    <option value="none">原图（无筛选）</option>
+                    <option value="candy">糖果色（Candy Pop）</option>
+                    <option value="grayscale">黑白（仅保留灰度颜色）</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
