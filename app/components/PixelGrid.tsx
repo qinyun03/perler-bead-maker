@@ -1,10 +1,9 @@
 import React from "react";
 import type { PixelCell, Merchant } from "../types";
-import { GRID_SIZE } from "../types";
 
 // PixelGrid 组件
-// - 负责将处理后的 `grid`（二维 PixelCell 数组）渲染为 50×50 的像素格子视图
-// - 每个格子的背景为匹配到的颜色（cell.hex），格内文本为所选商家的颜色编号（cell.codes[selectedMerchant]）
+// - 负责将处理后的 `grid`（二维 PixelCell 数组）渲染为像素格子视图
+// - 列数根据传入的 `grid` 自动计算，每个格子的背景为匹配到的颜色（cell.hex），格内文本为所选商家的颜色编号（cell.codes[selectedMerchant]）
 type Props = {
   grid: PixelCell[][];
   selectedMerchant: Merchant;
@@ -18,15 +17,9 @@ export default function PixelGrid({ grid, selectedMerchant }: Props) {
         当前商家：<span className="font-semibold">{selectedMerchant}</span> · 每个小格背景为实际颜色，文字为该商家的颜色编号。
       </div>
 
-      {/* 可滚动的网格容器：使用 CSS grid 布局，每列宽度固定为 16px */}
+      {/* 可滚动的网格容器：使用 CSS grid 布局，每列宽度固定为 16px，列数根据 grid 自动计算 */}
       <div className="max-h-[520px] w-full overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-950/40">
-        <div
-          className="grid auto-rows-[16px]"
-          style={{
-            // 根据 GRID_SIZE 动态设置列数（例如 50 列）
-            gridTemplateColumns: `repeat(${GRID_SIZE}, 16px)`,
-          }}
-        >
+        <div className="grid auto-rows-[16px]" style={{ gridTemplateColumns: `repeat(${grid[0]?.length ?? 0}, 16px)` }}>
           {grid.map((row, y) =>
             // 遍历每一行与列，渲染单个像素格
             row.map((cell, x) => (

@@ -34,7 +34,18 @@ export function processImageSrc(
           // 关闭抗锯齿以保持像素块的清晰度
           ctx.imageSmoothingEnabled = false;
           ctx.clearRect(0, 0, gridSize, gridSize);
-          ctx.drawImage(img, 0, 0, gridSize, gridSize);
+
+          // 使用 "contain" 模式将原图等比缩放并居中绘制到正方形画布上，
+          // 保留透明边缘（不会被拉伸填充）以便后续跳过那些区域
+          const iw = img.naturalWidth || img.width;
+          const ih = img.naturalHeight || img.height;
+          const scale = Math.min(gridSize / iw, gridSize / ih);
+          const dw = Math.round(iw * scale);
+          const dh = Math.round(ih * scale);
+          const dx = Math.round((gridSize - dw) / 2);
+          const dy = Math.round((gridSize - dh) / 2);
+          // 背景保持透明（不填充），drawImage 会把图片居中绘制
+          ctx.drawImage(img, dx, dy, dw, dh);
 
           const imageData = ctx.getImageData(0, 0, gridSize, gridSize);
           const data = imageData.data;
@@ -52,11 +63,9 @@ export function processImageSrc(
             let b = data[i + 2];
             const a = data[i + 3];
 
-            // 若存在透明度，则视为白色背景（避免透明区域带来干扰）
+            // 若存在透明度（来自画布的留白区域），跳过像素的色彩处理，
+            // 后续在生成网格时会将这些像素作为透明单元处理，不生成珠子
             if (a < 250) {
-              data[i] = 255;
-              data[i + 1] = 255;
-              data[i + 2] = 255;
               continue;
             }
 
@@ -93,13 +102,32 @@ export function processImageSrc(
 
           // 将处理后的像素逐一映射到最近的颜色条目（仅在 activePalette 中查找），生成 PixelCell 二维数组
           const newGrid: PixelCell[][] = [];
+          const emptyCell: PixelCell = {
+            hex: "transparent",
+            codes: {
+              MARD: "",
+              COCO: "",
+              漫漫: "",
+              盼盼: "",
+              咪小窝: "",
+            },
+          };
+
           for (let y = 0; y < gridSize; y++) {
             const row: PixelCell[] = [];
             for (let x = 0; x < gridSize; x++) {
               const idx = (y * gridSize + x) * 4;
+              const a = data[idx + 3];
+              // 透明区域直接推入空单元
+              if (a < 250) {
+                row.push(emptyCell);
+                continue;
+              }
+
               const r = data[idx];
               const g = data[idx + 1];
               const b = data[idx + 2];
+
               // findNearestColor 会返回包含 hex 与各商家编号的 PixelCell
               row.push(findNearestColor(activePalette, { r, g, b }, { filterStyle }));
             }

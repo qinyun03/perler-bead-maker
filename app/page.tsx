@@ -3,9 +3,10 @@
 import { useMemo, useRef, useState } from "react";
 import colorSystemMapping from "./colorSystemMapping.json";
 import type { Merchant, PixelCell, FilterStyle } from "./types";
-import { MERCHANTS, GRID_SIZE } from "./types";
+import { MERCHANTS } from "./types";
 import { createMappingEntries } from "./utils/color";
 import { processImageSrc } from "./utils/image";
+import useGridStore from "./store";
 import PixelGrid from "./components/PixelGrid";
 
 export default function Home() {
@@ -20,6 +21,8 @@ export default function Home() {
   const [filterStyle, setFilterStyle] = useState<FilterStyle>("none");
 
   const mappingEntries = useMemo(() => createMappingEntries(colorSystemMapping as any), []);
+  const gridSize = useGridStore((s) => s.gridSize);
+  const setGridSize = useGridStore((s) => s.setGridSize);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -50,7 +53,7 @@ export default function Home() {
     setError(null);
     try {
       const usedStyle = style ?? filterStyle;
-      const newGrid = await processImageSrc(src, mappingEntries, GRID_SIZE, usedStyle);
+      const newGrid = await processImageSrc(src, mappingEntries, gridSize, usedStyle);
       setGrid(newGrid);
     } catch (e) {
       console.error(e);
@@ -80,7 +83,7 @@ export default function Home() {
         {/* 顶部标题 + 简要说明 */}
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-black dark:text-zinc-50">
-            珠板像素画生成器（50×50）
+            珠板像素画生成器（{gridSize}×{gridSize}）
           </h1>
           <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400">
             上传一张图片，自动转换为 50×50 像素画，并根据不同商家（MARD、COCO、漫漫、盼盼、咪小窝）
@@ -103,7 +106,7 @@ export default function Home() {
                 className="block w-full text-sm text-zinc-700 file:mr-4 file:rounded-md file:border-0 file:bg-zinc-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-50 hover:file:bg-zinc-800 cursor-pointer dark:file:bg-zinc-100 dark:file:text-zinc-900 dark:hover:file:bg-zinc-200"
               />
               <span className="text-xs text-zinc-500">
-                建议使用正方形或接近正方形的图片，系统会自动压缩到 50×50 像素进行取样。
+                建议使用正方形或接近正方形的图片，系统会自动等比缩放并居中到 {gridSize}×{gridSize} 像素进行取样。
               </span>
             </div>
 
@@ -146,12 +149,34 @@ export default function Home() {
                   </select>
                 </div>
               </div>
+              {/* 网格尺寸调整：范围 5-64，步长 2，松开滑块时触发重新生成 */}
+              <div className="mt-3">
+                <label className="text-sm font-medium text-zinc-800 dark:text-zinc-100">4. 网格尺寸</label>
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={5}
+                    max={64}
+                    step={2}
+                    value={gridSize}
+                    onChange={(e) => setGridSize(Number(e.target.value))}
+                    onMouseUp={() => {
+                      if (imageSrc) processImage(imageSrc);
+                    }}
+                    onTouchEnd={() => {
+                      if (imageSrc) processImage(imageSrc);
+                    }}
+                    className="w-48"
+                  />
+                  <div className="text-sm text-zinc-600 dark:text-zinc-400">{gridSize} × {gridSize}</div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs text-zinc-600 dark:text-zinc-400">
-              像素画尺寸：<span className="font-medium">50 × 50（共 2500 点）</span>，
+              像素画尺寸：<span className="font-medium">{gridSize} × {gridSize}（共 {gridSize * gridSize} 点）</span>，
               每个点显示当前商家的颜色编号。
             </div>
             <button
@@ -213,7 +238,7 @@ export default function Home() {
                   <div
                     className="grid auto-rows-[16px]"
                     style={{
-                      gridTemplateColumns: `repeat(${GRID_SIZE}, 16px)`,
+                      gridTemplateColumns: `repeat(${gridSize}, 16px)`,
                     }}
                   >
                     {grid.map((row, y) =>
