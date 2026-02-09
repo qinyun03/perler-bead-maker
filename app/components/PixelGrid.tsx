@@ -1,59 +1,75 @@
 import React from "react";
 import type { PixelCell, Merchant } from "../types";
 
-// PixelGrid 组件
-// - 负责将处理后的 `grid`（二维 PixelCell 数组）渲染为像素格子视图
-// - 列数根据传入的 `grid` 自动计算，每个格子的背景为匹配到的颜色（cell.hex），格内文本为所选商家的颜色编号（cell.codes[selectedMerchant]）
 type Props = {
   grid: PixelCell[][];
   selectedMerchant: Merchant;
-  // 可选的外部控制参数
   toolMode?: any;
   opacity?: number;
   onCellClick?: (cell: PixelCell, x: number, y: number) => void;
   onEyedrop?: (cell: PixelCell, x: number, y: number) => void;
+  // 裸网格用于绝对叠放（无外层容器）
+  bare?: boolean;
+  cellSize?: number;
 };
 
-export default function PixelGrid({ grid, selectedMerchant, opacity = 1, onCellClick, onEyedrop }: Props) {
+export default function PixelGrid({
+  grid,
+  selectedMerchant,
+  opacity = 1,
+  onCellClick,
+  onEyedrop,
+  bare = false,
+  cellSize = 16,
+}: Props) {
+  // 渲染单个格子
+  const renderCell = (cell: PixelCell, x: number, y: number) => (
+    <div
+      key={`${x}-${y}`}
+      title={`(${x + 1}, ${y + 1}) - ${cell.codes[selectedMerchant]}`}
+      className="flex items-center justify-center border border-zinc-200 text-[7px] font-medium leading-none text-black/80 dark:border-zinc-800 dark:text-black"
+      style={{
+        width: `${cellSize}px`,
+        height: `${cellSize}px`,
+        backgroundColor: cell.hex,
+      }}
+      onClick={() => onCellClick?.(cell, x, y)}
+      onDoubleClick={() => onEyedrop?.(cell, x, y)}
+    >
+      <span className="px-[1px]" style={{ textShadow: "0 0 2px rgba(255,255,255,0.9)" }}>
+        {cell.codes[selectedMerchant]}
+      </span>
+    </div>
+  );
+
+  // 裸网格：仅返回 grid 元素，便于外层绝对定位
+  if (bare) {
+    return (
+      <div
+        className="grid"
+        style={{
+          gridAutoRows: `${cellSize}px`,
+          gridTemplateColumns: `repeat(${grid[0]?.length ?? 0}, ${cellSize}px)`,
+          opacity,
+        }}
+      >
+        {grid.map((row, y) => row.map((cell, x) => renderCell(cell, x, y)))}
+      </div>
+    );
+  }
+
+  // 标准渲染（包含外层容器与说明）
   return (
     <div className="flex flex-col gap-2">
-      {/* 顶部说明：显示当前选中的商家 */}
       <div className="text-xs text-zinc-600 dark:text-zinc-400">
         当前商家：<span className="font-semibold">{selectedMerchant}</span> · 每个小格背景为实际颜色，文字为该商家的颜色编号。
       </div>
-      {/* 可滚动的网格容器：使用 CSS grid 布局，每列宽度固定为 16px，列数根据 grid 自动计算 */}
-      <div
-        className="max-h-[520px] w-full overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-950/40"
-        style={{ opacity }}
-      >
-        <div className="grid auto-rows-[16px]" style={{ gridTemplateColumns: `repeat(${grid[0]?.length ?? 0}, 16px)` }}>
-          {grid.map((row, y) =>
-            // 遍历每一行与列，渲染单个像素格
-            row.map((cell, x) => (
-              <div
-                key={`${x}-${y}`}
-                // title 中包含坐标与该格对应的商家编号，便于悬停查看
-                title={`(${x + 1}, ${y + 1}) - ${cell.codes[selectedMerchant]}`}
-                className="flex h-4 w-4 items-center justify-center border border-zinc-200 text-[7px] font-medium leading-none text-black/80 dark:border-zinc-800 dark:text-black"
-                style={{
-                  // 使用匹配到的十六进制颜色作为格子背景
-                  backgroundColor: cell.hex,
-                }}
-                onClick={() => onCellClick?.(cell, x, y)}
-                onDoubleClick={() => onEyedrop?.(cell, x, y)}
-              >
-                <span
-                  className="px-[1px]"
-                  style={{
-                    // 给编号加一个淡淡的白色描边，提升在深色背景上的可读性
-                    textShadow: "0 0 2px rgba(255,255,255,0.9)",
-                  }}
-                >
-                  {cell.codes[selectedMerchant]}
-                </span>
-              </div>
-            )),
-          )}
+
+      <div className="max-h-[520px] w-full overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-950/40" style={{ opacity }}>
+        <div className="flex justify-center">
+          <div className="grid" style={{ gridAutoRows: `${cellSize}px`, gridTemplateColumns: `repeat(${grid[0]?.length ?? 0}, ${cellSize}px)` }}>
+            {grid.map((row, y) => row.map((cell, x) => renderCell(cell, x, y)))}
+          </div>
         </div>
       </div>
     </div>

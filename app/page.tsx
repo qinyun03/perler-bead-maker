@@ -17,6 +17,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // 叠放层透明度（0-100）用于控制裸网格在原图之上的显示程度
+  const [overlayOpacity, setOverlayOpacity] = useState<number>(100);
+
   // 色彩风格滤镜状态（用于调色板子集或在 processImageSrc 中传入）
   const [filterStyle, setFilterStyle] = useState<FilterStyle>("none");
 
@@ -229,7 +232,56 @@ export default function Home() {
               像素图纸（编号视图）
             </h2>
             {grid ? (
-              <PixelGrid grid={grid} selectedMerchant={selectedMerchant} />
+              <>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                  当前商家：<span className="font-semibold">{selectedMerchant}</span>
+                </div>
+
+                {/* 叠放容器：相对定位，内部两个绝对定位元素完全重合（底图：原图；上层：裸网格） */}
+                <div className="relative mx-auto" style={{ width: `${(grid[0]?.length ?? 0) * 16}px`, height: `${grid.length * 16}px` }}>
+                  {/* 底图：原图按覆盖方式铺满容器，保证与网格像素完全重合 */}
+                  {imageSrc && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={imageSrc}
+                      alt="原图对比底图"
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  )}
+
+                  {/* 裸网格：绝对定位覆盖在原图之上，透明度由滑块控制 */}
+                  <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                    <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: "center" }}>
+                      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                        <div style={{ position: "absolute", inset: 0 }}>
+                          <PixelGrid grid={grid} selectedMerchant={selectedMerchant} bare cellSize={16} opacity={overlayOpacity / 100} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 透明度滑块 */}
+                <div className="mt-2 flex items-center gap-3">
+                  <label className="text-sm text-zinc-700 dark:text-zinc-200">透明度</label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={overlayOpacity}
+                    onChange={(e) => setOverlayOpacity(Number(e.target.value))}
+                    className="w-48"
+                  />
+                  <div className="text-sm text-zinc-600 dark:text-zinc-400">{overlayOpacity}%</div>
+                  <div className="text-xs text-zinc-500 ml-3">0% 显示底图 · 100% 显示拼豆图纸</div>
+                </div>
+              </>
             ) : (
               <div className="flex h-full min-h-40 items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/60 p-4 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-400">
                 生成结果会显示在这里：先在上方选择一张图片。
