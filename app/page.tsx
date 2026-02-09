@@ -23,6 +23,10 @@ export default function Home() {
   // 色彩风格滤镜状态（用于调色板子集或在 processImageSrc 中传入）
   const [filterStyle, setFilterStyle] = useState<FilterStyle>("none");
 
+  // 图片原始尺寸和显示尺寸
+  const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [imageDisplaySize, setImageDisplaySize] = useState<{ width: number; height: number } | null>(null);
+
   const mappingEntries = useMemo(() => createMappingEntries(colorSystemMapping as any), []);
   const [activeColor, setActiveColor] = useState<PixelCell | null>(null);
   const gridSize = useGridStore((s) => s.gridSize);
@@ -54,8 +58,26 @@ export default function Home() {
     reader.onload = () => {
       const result = reader.result;
       if (typeof result === "string") {
-        setImageSrc(result);
-        processImage(result, filterStyle);
+        // 创建临时图片元素来获取原始尺寸
+        const img = new Image();
+        img.onload = () => {
+          const naturalWidth = img.naturalWidth;
+          const naturalHeight = img.naturalHeight;
+          
+          // 计算在 gridSize × gridSize 约束下的显示尺寸（保持宽高比）
+          const scale = Math.min(gridSize / naturalWidth, gridSize / naturalHeight);
+          const displayWidth = Math.round(naturalWidth * scale);
+          const displayHeight = Math.round(naturalHeight * scale);
+          
+          setImageNaturalSize({ width: naturalWidth, height: naturalHeight });
+          setImageDisplaySize({ width: displayWidth, height: displayHeight });
+          setImageSrc(result);
+          processImage(result, filterStyle);
+        };
+        img.onerror = () => {
+          setError("加载图片失败，请重试。");
+        };
+        img.src = result;
       }
     };
     reader.onerror = () => {
@@ -71,6 +93,14 @@ export default function Home() {
       const usedStyle = style ?? filterStyle;
       const newGrid = await processImageSrc(src, mappingEntries, gridSize, usedStyle);
       setGrid(newGrid);
+      
+      // 如果已经有图片原始尺寸，重新计算显示尺寸（因为gridSize可能已改变）
+      if (imageNaturalSize) {
+        const scale = Math.min(gridSize / imageNaturalSize.width, gridSize / imageNaturalSize.height);
+        const displayWidth = Math.round(imageNaturalSize.width * scale);
+        const displayHeight = Math.round(imageNaturalSize.height * scale);
+        setImageDisplaySize({ width: displayWidth, height: displayHeight });
+      }
     } catch (e) {
       console.error(e);
       setError("处理图片时出错，请重试。");
@@ -88,6 +118,8 @@ export default function Home() {
     setGrid(null);
     setError(null);
     setSelectedMerchant("MARD");
+    setImageNaturalSize(null);
+    setImageDisplaySize(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -109,6 +141,22 @@ export default function Home() {
     setActiveColor({ hex: cell.hex, codes: cell.codes });
   };
 
+  const canvasPixelWidth = (grid?.[0]?.length ?? 0) * 16;
+  const canvasPixelHeight = (grid?.length ?? 0) * 16;
+
+  // 计算实际显示尺寸
+  // 网格尺寸：gridSize * 16（每个单元格16px）
+  const gridPixelWidth = gridSize * 16;
+  const gridPixelHeight = gridSize * 16;
+  
+  // 图片显示尺寸（保持宽高比）
+  const imagePixelWidth = imageDisplaySize ? imageDisplaySize.width * 16 : gridPixelWidth;
+  const imagePixelHeight = imageDisplaySize ? imageDisplaySize.height * 16 : gridPixelHeight;
+  
+  // 容器尺寸使用网格尺寸，图片在容器内居中显示
+  const containerWidth = gridPixelWidth;
+  const containerHeight = gridPixelHeight;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex min-h-screen w-full max-w-5xl flex-col gap-8 py-10 px-4 sm:px-8 bg-white dark:bg-black">
@@ -118,7 +166,7 @@ export default function Home() {
             珠板像素画生成器（{gridSize}×{gridSize}）
           </h1>
           <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400">
-            上传一张图片，自动转换为 50×50 像素画，并根据不同商家（MARD、COCO、漫漫、盼盼、咪小窝）
+            上传一张图片，自动转换为 {gridSize}×{gridSize} 像素画，并根据不同商家（MARD、COCO、漫漫、盼盼、咪小窝）
             显示对应的颜色编号，方便按图取色拼珠。
           </p>
         </header>
@@ -266,49 +314,52 @@ export default function Home() {
                   当前商家：<span className="font-semibold">{selectedMerchant}</span>
                 </div>
 
-                {/* 叠放容器：相对定位，内部两个绝对定位元素完全重合（底图：原图；上层：裸网格） */}
-                <div className="relative mx-auto" style={{ width: `${(grid[0]?.length ?? 0) * 16}px`, height: `${grid.length * 16}px` }}>
-                  {/* 底图：原图按覆盖方式铺满容器，保证与网格像素完全重合 */}
-                  {imageSrc && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={imageSrc}
-                      alt="原图对比底图"
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                      }}
-                    />
-                  )}
+                {/* 图纸容器：限制最大高度，确保透明度滑块可见 */}
+                <div className="flex flex-col gap-3">
+                  {/* 叠放容器：相对定位，内部两个绝对定位元素完全重合（底图：原图；上层：裸网格） */}
+                  <div className="relative mx-auto overflow-auto max-h-[400px]" style={{ maxWidth: "100%" }}>
+                    <div style={{ position: "relative", width: `${containerWidth}px`, height: `${containerHeight}px`, minHeight: "100px", margin: "0 auto" }}>
+                      {/* 底图：原图按像素画布的固定像素尺寸渲染，保证与网格像素完全一致 */}
+                      {imageSrc && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={imageSrc}
+                          alt="原图对比底图"
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: 0,
+                            width: `${containerWidth}px`,
+                            height: `${containerHeight}px`,
+                            objectFit: "contain",
+                            backgroundColor: "transparent",
+                          }}
+                        />
+                      )}
 
-                  {/* 裸网格：绝对定位覆盖在原图之上，透明度由滑块控制 */}
-                  <div style={{ position: "absolute", inset: 0, pointerEvents: "auto" }}>
-                    <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: "center" }}>
-                      <div style={{ position: "relative", width: "100%", height: "100%" }}>
-                        <div style={{ position: "absolute", inset: 0 }}>
-                          <PixelGrid grid={grid} selectedMerchant={selectedMerchant} bare cellSize={16} opacity={overlayOpacity / 100} onCellClick={handleCellClick} onEyedrop={handleEyedrop} />
-                        </div>
+                      {/* 裸网格：绝对定位覆盖在原图之上，透明度由滑块控制 */}
+                      <div style={{ position: "absolute", left: 0, top: 0, width: `${containerWidth}px`, height: `${containerHeight}px`, pointerEvents: "auto" }}>
+                        <PixelGrid grid={grid} selectedMerchant={selectedMerchant} bare cellSize={16} opacity={overlayOpacity / 100} onCellClick={handleCellClick} onEyedrop={handleEyedrop} />
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* 透明度滑块 */}
-                <div className="mt-2 flex items-center gap-3">
-                  <label className="text-sm text-zinc-700 dark:text-zinc-200">透明度</label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={overlayOpacity}
-                    onChange={(e) => setOverlayOpacity(Number(e.target.value))}
-                    className="w-48"
-                  />
-                  <div className="text-sm text-zinc-600 dark:text-zinc-400">{overlayOpacity}%</div>
-                  <div className="text-xs text-zinc-500 ml-3">0% 显示底图 · 100% 显示拼豆图纸</div>
+                  {/* 透明度滑块 - 固定在图纸下方 */}
+                  <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-3 bg-zinc-50/60 dark:bg-zinc-900/40 p-3 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-zinc-700 dark:text-zinc-200 whitespace-nowrap">透明度控制</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={overlayOpacity}
+                        onChange={(e) => setOverlayOpacity(Number(e.target.value))}
+                        className="w-32 sm:w-48"
+                      />
+                      <div className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{overlayOpacity}%</div>
+                    </div>
+                    <div className="text-xs text-zinc-500">0% 显示底图 · 100% 显示拼豆图纸</div>
+                  </div>
                 </div>
 
                 {/* 编辑区：配色面板（调色板优先显示图纸已有颜色，实际编辑在上方图纸进行）*/}
