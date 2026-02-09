@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import colorSystemMapping from "./colorSystemMapping.json";
 import type { Merchant, PixelCell, FilterStyle } from "./types";
 import { MERCHANTS } from "./types";
-import { createMappingEntries } from "./utils/color";
+import { createMappingEntries, filterPalette } from "./utils/color";
 import { processImageSrc } from "./utils/image";
 import useGridStore from "./store";
 import PixelGrid from "./components/PixelGrid";
@@ -24,8 +24,21 @@ export default function Home() {
   const [filterStyle, setFilterStyle] = useState<FilterStyle>("none");
 
   const mappingEntries = useMemo(() => createMappingEntries(colorSystemMapping as any), []);
+  const [activeColor, setActiveColor] = useState<PixelCell | null>(null);
   const gridSize = useGridStore((s) => s.gridSize);
   const setGridSize = useGridStore((s) => s.setGridSize);
+
+  // 优先显示当前图纸中已有的颜色（出现在网格中的 hex 优先）
+  const prioritizedPalette = useMemo(() => {
+    const base = filterPalette(mappingEntries, filterStyle);
+    if (!grid) return base;
+    const present = new Set(grid.flat().map((c) => c.hex.toUpperCase()));
+    return [...base].sort((a, b) => {
+      const ia = present.has(a.hex.toUpperCase()) ? 0 : 1;
+      const ib = present.has(b.hex.toUpperCase()) ? 0 : 1;
+      return ia - ib;
+    });
+  }, [mappingEntries, filterStyle, grid]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -78,6 +91,22 @@ export default function Home() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  // 点击单元格：使用当前选中色进行填充
+  const handleCellClick = (cell: PixelCell, x: number, y: number) => {
+    if (!activeColor) return;
+    setGrid((g) => {
+      if (!g) return g;
+      const next = g.map((row) => row.slice());
+      next[y][x] = { hex: activeColor.hex, codes: activeColor.codes };
+      return next;
+    });
+  };
+
+  // 双击吸管：从单元格取色为当前选中色
+  const handleEyedrop = (cell: PixelCell, x: number, y: number) => {
+    setActiveColor({ hex: cell.hex, codes: cell.codes });
   };
 
   return (
@@ -256,11 +285,11 @@ export default function Home() {
                   )}
 
                   {/* 裸网格：绝对定位覆盖在原图之上，透明度由滑块控制 */}
-                  <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                  <div style={{ position: "absolute", inset: 0, pointerEvents: "auto" }}>
                     <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: "center" }}>
                       <div style={{ position: "relative", width: "100%", height: "100%" }}>
                         <div style={{ position: "absolute", inset: 0 }}>
-                          <PixelGrid grid={grid} selectedMerchant={selectedMerchant} bare cellSize={16} opacity={overlayOpacity / 100} />
+                          <PixelGrid grid={grid} selectedMerchant={selectedMerchant} bare cellSize={16} opacity={overlayOpacity / 100} onCellClick={handleCellClick} onEyedrop={handleEyedrop} />
                         </div>
                       </div>
                     </div>
@@ -280,6 +309,29 @@ export default function Home() {
                   />
                   <div className="text-sm text-zinc-600 dark:text-zinc-400">{overlayOpacity}%</div>
                   <div className="text-xs text-zinc-500 ml-3">0% 显示底图 · 100% 显示拼豆图纸</div>
+                </div>
+
+                {/* 编辑区：配色面板（调色板优先显示图纸已有颜色，实际编辑在上方图纸进行）*/}
+                <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium text-zinc-800 dark:text-zinc-100">手动编辑与配色</div>
+                    <div className="text-xs text-zinc-500">在上方图纸点击填色 · 双击吸管取色</div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-6 gap-1 max-h-48 overflow-auto rounded border border-zinc-100 p-1 dark:border-zinc-800">
+                    {prioritizedPalette.map((entry) => (
+                      <button
+                        key={entry.hex}
+                        onClick={() => setActiveColor({ hex: entry.hex, codes: entry.codes })}
+                        type="button"
+                        className={`w-8 h-8 rounded-sm border ${activeColor?.hex === entry.hex ? "ring-2 ring-offset-1 ring-indigo-500" : "border-zinc-200"}`}
+                        style={{ backgroundColor: entry.hex }}
+                        title={`${entry.hex} · ${entry.codes[selectedMerchant]}`}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="mt-2 text-xs">当前选中： <span className="font-medium">{activeColor ? activeColor.codes[selectedMerchant] : "—"}</span></div>
                 </div>
               </>
             ) : (
