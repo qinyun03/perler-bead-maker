@@ -7,18 +7,25 @@ import type { PixelCell, Merchant } from "../types";
 type Props = {
   grid: PixelCell[][];
   selectedMerchant: Merchant;
+  // 可选的外部控制参数
+  toolMode?: any;
+  opacity?: number;
+  onCellClick?: (cell: PixelCell, x: number, y: number) => void;
+  onEyedrop?: (cell: PixelCell, x: number, y: number) => void;
 };
 
-export default function PixelGrid({ grid, selectedMerchant }: Props) {
+export default function PixelGrid({ grid, selectedMerchant, opacity = 1, onCellClick, onEyedrop }: Props) {
   return (
     <div className="flex flex-col gap-2">
       {/* 顶部说明：显示当前选中的商家 */}
       <div className="text-xs text-zinc-600 dark:text-zinc-400">
         当前商家：<span className="font-semibold">{selectedMerchant}</span> · 每个小格背景为实际颜色，文字为该商家的颜色编号。
       </div>
-
       {/* 可滚动的网格容器：使用 CSS grid 布局，每列宽度固定为 16px，列数根据 grid 自动计算 */}
-      <div className="max-h-[520px] w-full overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-950/40">
+      <div
+        className="max-h-[520px] w-full overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-950/40"
+        style={{ opacity }}
+      >
         <div className="grid auto-rows-[16px]" style={{ gridTemplateColumns: `repeat(${grid[0]?.length ?? 0}, 16px)` }}>
           {grid.map((row, y) =>
             // 遍历每一行与列，渲染单个像素格
@@ -32,6 +39,8 @@ export default function PixelGrid({ grid, selectedMerchant }: Props) {
                   // 使用匹配到的十六进制颜色作为格子背景
                   backgroundColor: cell.hex,
                 }}
+                onClick={() => onCellClick?.(cell, x, y)}
+                onDoubleClick={() => onEyedrop?.(cell, x, y)}
               >
                 <span
                   className="px-[1px]"
